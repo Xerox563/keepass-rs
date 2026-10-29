@@ -3654,4 +3654,62 @@ mod merge_tests {
         assert!(destination_db.group(GROUP2_ID).is_none());
         assert!(destination_db.group(new_group_id).is_none());
     }
+
+    #[test]
+    fn test_ancestor_icon_added_in_source_is_merged() {
+        let ancestor_db = create_test_database();
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        let icon_id = source_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .set_icon_custom_new(vec![1, 2, 3, 4])
+            .id();
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 0);
+        assert_eq!(result.events.len(), 2);
+        assert_eq!(
+            destination_db.custom_icon(icon_id).unwrap().data,
+            vec![1, 2, 3, 4]
+        );
+    }
+
+    #[test]
+    fn test_ancestor_icon_deleted_in_source_is_removed() {
+        let mut ancestor_db = create_test_database();
+        let icon_id = ancestor_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .track_changes()
+            .set_icon_custom_new(vec![1, 2, 3, 4])
+            .id();
+
+        let mut destination_db = ancestor_db.clone();
+        let mut source_db = ancestor_db.clone();
+
+        source_db
+            .entry_mut(ENTRY1_ID)
+            .unwrap()
+            .custom_icon_mut()
+            .unwrap()
+            .remove();
+        source_db
+            .deleted_objects
+            .insert(icon_id.uuid(), Some(Times::now()));
+
+        let result = destination_db
+            .merge_with_ancestor(&source_db, &ancestor_db)
+            .unwrap();
+
+        assert_eq!(result.warnings.len(), 0);
+        assert_eq!(result.events.len(), 2);
+        assert!(destination_db.custom_icon(icon_id).is_none());
+        assert!(destination_db.deleted_objects.contains_key(&icon_id.uuid()));
+    }
 }
